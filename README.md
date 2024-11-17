@@ -4,106 +4,58 @@
 
 ## Description
 
-L'application **Bibliothèque App** est une application Flask qui permet de gérer une bibliothèque (emprunt, retour de livres, etc.). Elle est orchestrée avec Docker et se connecte à une base de données PostgreSQL pour la gestion des données des livres et des utilisateurs.
+L'application Bibliothèque App est une application Flask permettant de gérer une bibliothèque (emprunt, retour de livres, etc.). Cette application est orchestrée avec Docker et déployée dans un cluster Kubernetes pour permettre une gestion scalable et résiliente. Elle se connecte à une base de données PostgreSQL pour gérer les données des livres et des utilisateurs.
+
+
+### Explication des processus de déploiement :
+
+1. **Base de données PostgreSQL** : 
+   - Le déploiement de PostgreSQL utilise un seul pod avec les configurations et secrets pour la base de données.
+   - La `NetworkPolicy` restreint l'accès aux autres services pour qu'uniquement les pods du backend puissent accéder à la base de données.
+
+2. **Application Flask (backend)** : 
+   - Le déploiement de l'application Flask est configuré avec un **init container** qui attend que la base de données PostgreSQL soit prête avant de démarrer l'application.
+   - Une fois l'application lancée, elle se connecte à la base de données PostgreSQL en utilisant les informations de connexion contenues dans le `ConfigMap` et le `Secret`.
+
+3. **Services Kubernetes** :
+   - Le service `bibliotheque-backend` expose l'application Flask sur le port `30000` pour qu'elle soit accessible en dehors du cluster Kubernetes.
+   - Le service `postgres` expose la base de données PostgreSQL uniquement aux autres pods du même réseau.
+
+4. **Mise à l'échelle** :
+   - L'application Flask est mise à l'échelle avec 3 réplicas pour garantir une haute disponibilité.
+   - L'anti-affinité empêche que toutes les réplicas de l'application Flask soient placées sur le même nœud, ce qui contribue à améliorer la résilience du service.
 
 ---
 
-## Structure du projet
+### Déploiement dans Kubernetes
 
-```
-Bibliothèque/
-│
-├── app.py                  # Code principal de l'application Flask
-├── templates/              # Contient les fichiers HTML (interface utilisateur)
-├── data/                   # Répertoire pour persister les données PostgreSQL
-├── Dockerfile              # Définition de l'image Docker de l'application
-├── docker-compose.yml      # Orchestration des services avec Docker Compose
-└── README.md               # Documentation
-```
+1. **Appliquez les fichiers de configuration** :
+   Exécutez les commandes suivantes pour déployer les ressources Kubernetes :
 
----
+   ```bash
+   kubectl apply -f backend-deployment.yaml
+   kubectl apply -f backend-service.yaml
+   kubectl apply -f backend-configmap.yaml
+   kubectl apply -f backend-secret.yaml
+   kubectl apply -f database-deployment.yaml
+   kubectl apply -f database-service.yaml
+   kubectl apply -f network-policy.yaml
+   ```
 
-## Prérequis
+2. **Vérifiez le déploiement** :
+   Après avoir appliqué les fichiers, vous pouvez vérifier l'état des ressources avec ces commandes :
 
-Avant de démarrer l'application, assurez-vous d'avoir installé les outils suivants :
+   ```bash
+   kubectl get pods
+   kubectl get services
+   kubectl get deployments
+   kubectl get networkpolicies
+   ```
 
-- [Docker](https://docs.docker.com/get-docker/)
-- [Docker Compose](https://docs.docker.com/compose/install/)
-
----
-
-## Instructions d'exécution avec Docker
-
-### 1. Créer un réseau Docker
-
-Nous devons créer un réseau personnalisé pour permettre à l'application Flask et à la base de données PostgreSQL de communiquer.
-
-```bash
-docker network create mynetwork
-```
-
----
-
-### 2. Lancer la base de données PostgreSQL
-
-Lancez le conteneur PostgreSQL en utilisant la commande suivante. Cela crée une base de données PostgreSQL avec un utilisateur `user` et un mot de passe `password`, et les données seront persistées dans le répertoire `./data`.
-
-```bash
-docker run -d --name postgres_db --network mynetwork \
-  -e POSTGRES_USER=user \
-  -e POSTGRES_PASSWORD=password \
-  -e POSTGRES_DB=bibliotheque \
-  -v ./data:/var/lib/postgresql/data \
-  postgres:latest
-```
-
-Cela démarre le conteneur PostgreSQL et le connecte au réseau `mynetwork`.
-
----
-
-### 3. Lancer l'application Flask
-
-Une fois le conteneur de la base de données en place, vous pouvez maintenant démarrer l'application Flask. Utilisez l'image Docker hébergée sur Docker Hub pour l'application.
-
-```bash
-docker run -d --name Ma_bibliotheque --network mynetwork \
-  -e DATABASE_URL=postgresql://user:password@postgres_db:5432/bibliotheque \
-  -p 5000:5000 \
-  isaolivia/ma_bibliotheque:latest
-```
-
-- **Nom du conteneur** : `Ma_bibliotheque`
-- **Réseau** : `mynetwork`
-- **Port d'exposition** : L'application sera accessible sur le port `5000` de votre machine locale.
-- **Variable d'environnement `DATABASE_URL`** : Indique l'URL de connexion à la base de données PostgreSQL.
-
----
-
-### 4. Accéder à l'application
-
-Une fois les conteneurs démarrés, ouvrez votre navigateur et accédez à l'application via :
-
-- **URL** : [http://localhost:5000](http://localhost:5000)
-
----
-
-## Notes de dépannage
-
-### Problème : Base de données inaccessible
-
-Si l'application Flask ne parvient pas à se connecter à la base de données, voici quelques vérifications possibles :
-- **Variables d'environnement** : Assurez-vous que les variables `POSTGRES_USER`, `POSTGRES_PASSWORD`, et `POSTGRES_DB` dans la commande `docker run` de la base de données correspondent à celles utilisées dans l'URL de connexion (`DATABASE_URL`).
-- **Dépendance entre les conteneurs** : Vérifiez que le conteneur PostgreSQL est bien lancé avant l'application Flask. Vous pouvez utiliser `docker ps` pour voir si tous les conteneurs sont en cours d'exécution.
-
----
-
-## Résumé
-
-Avec ces instructions, vous pouvez facilement lancer l'application **Bibliothèque App** en utilisant Docker :
-
-1. Créez un réseau Docker pour la communication entre les services.
-2. Démarrez la base de données PostgreSQL.
-3. Lancez l'application Flask en utilisant l'image Docker disponible sur Docker Hub.
-
-Bonne utilisation de l'application **Bibliothèque App** ! 🎉
+3. **Accédez à l'application** :
+   Vous pouvez accéder à l'application Flask en utilisant l'URL suivante (remplacez `<your-node-ip>` par l'adresse IP de votre nœud Kubernetes) :
+   
+   ```
+   http://<your-node-ip>:30000
+   ```
 
