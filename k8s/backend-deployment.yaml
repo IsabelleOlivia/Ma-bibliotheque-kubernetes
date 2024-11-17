@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bibliotheque-backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: bibliotheque-backend
+  template:
+    metadata:
+      labels:
+        app: bibliotheque-backend
+    spec:
+      initContainers:
+      - name: wait-for-db
+        image: busybox
+        command: ['sh', '-c', 
+          'until nc -z -w1 postgres 5432; do echo "attente de la base de données..."; sleep 5; done']
+      containers:
+      - name: bibliotheque-backend
+        image: isaolivia/ma-bibliothequekub:latest
+        env:
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              key: db_host
+              name: bibliotheque-config
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              key: db_name
+              name: bibliotheque-config
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              key: db_user
+              name: bibliotheque-secret
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: db_password
+              name: bibliotheque-secret
+        - name: DATABASE_URL
+          value: "postgresql://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):5432/$(DB_NAME)"
+        ports:
+        - containerPort: 5000
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 250m
+            memory: 64Mi
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 5
